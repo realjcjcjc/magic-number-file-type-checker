@@ -23,6 +23,7 @@ MAGIC_DB = [
 # Define the maximum number of bytes to read for magic number detection
 MAX_MAGIC_BYTES = max(offset + len(magic) for offset, magic, _ in MAGIC_DB)
 
+# Match the magic number against the database
 def match_magic(magic_number: bytes) -> dict:
     for offset, magic, label in MAGIC_DB:
         end = offset + len(magic)

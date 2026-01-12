@@ -6,17 +6,20 @@ import sys
 from filetype_checker import detector
 from filetype_checker.error import FtcheckError
 
-
+# Main function for CLI
 def main(argv=None) -> int:
+    # Set up argument parser
     parser = argparse.ArgumentParser(
         prog="ftcheck",
         description="Detect file type using magic numbers.",
     )
 
+    # Add arguments
     parser.add_argument("path", nargs="?", help="path to the file to check.")
     parser.add_argument("--json", action="store_true", help="output result in JSON format.")
     args = parser.parse_args(argv)
 
+    # Handle no path provided
     if not args.path:
         if args.json:
             payload = {
@@ -32,6 +35,7 @@ def main(argv=None) -> int:
             print("ftcheck: error: no file path provided.", file=sys.stderr)
         return 2
 
+    # Perform detection
     try:
         file_report = detector.detect(args.path)
 
