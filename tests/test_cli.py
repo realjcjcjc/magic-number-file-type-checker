@@ -63,7 +63,7 @@ def test_json_error_no_path(tmp_path: Path, capsys) -> None:
     exit_code = cli.main([str(missing), "--json"])
     captured = capsys.readouterr()
 
-    assert exit_code == 3
+    assert exit_code == 2
     assert captured.err == ""
 
     output = json.loads(captured.out)
