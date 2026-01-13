@@ -5,6 +5,7 @@ import sys
 
 from filetype_checker import detector, scanner
 from filetype_checker.error import FtcheckError
+from filetype_checker.extensions import get_ext_and_mismatch
 
 
 # Main function for CLI
@@ -18,12 +19,14 @@ def main(argv=None) -> int:
     # Add arguments
     parser.add_argument("paths", nargs="+", help="paths to the file to check.")
     parser.add_argument("--json", action="store_true", help="output result in JSON format.")
-    parser.add_argument("-r", "--recursive", action="store_true", 
-                        help="recursively check files in directories.")
+    parser.add_argument(
+        "-r", "--recursive", action="store_true", help="recursively check files in directories."
+    )
     args = parser.parse_args(argv)
 
     files, problems = scanner.expand_paths(args.paths, args.recursive)
     problem_occurred = bool(problems)
+    detect_error_occurred = False
 
     # Print Errors encountered during path expansion
     for problem in problems:
@@ -35,20 +38,25 @@ def main(argv=None) -> int:
                     "code": problem["code"],
                     "message": problem["message"],
                     "details": problem.get("details", None),
-                }
+                },
             }
-            print(json.dumps(payload, ensure_ascii=False, separators=(',', ':')))
+            print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
         else:
             print(f"ftcheck: error: {problem['message']}", file=sys.stderr)
 
     # Perform detection
     try:
         for file in files:
-            try: 
+            try:
                 file_report = detector.detect(file)
+                ext, mismatch = get_ext_and_mismatch(
+                    file_report["path"], file_report["file_type"], file_report["magic"]["matched"]
+                )
+                file_report["ext"] = ext
+                file_report["mismatch"] = mismatch
 
                 if args.json:
-                    print(json.dumps(file_report, ensure_ascii=False, separators=(',', ':')))
+                    print(json.dumps(file_report, ensure_ascii=False, separators=(",", ":")))
                 else:
                     path = file_report["path"]
                     file_type = file_report["file_type"]
@@ -58,9 +66,18 @@ def main(argv=None) -> int:
                     offset = magic["offset"] if magic["offset"] is not None else "N/A"
                     signature = magic["signature"] if magic["signature"] is not None else "N/A"
 
-                    print(f"{path}: {file_type}, matched={matched}, size={size}, "
-                        f"offset={offset}, signature={signature}")
+                    base = (
+                        f"{path}: {file_type}, matched={matched}, size={size}, "
+                        f"offset={offset}, signature={signature}"
+                    )
+
+                    if mismatch:
+                        base += f" (extension mismatch: {ext})"
+
+                    print(base)
+
             except FtcheckError as e:
+                detect_error_occurred = True
                 if args.json:
                     payload = {
                         "ok": False,
@@ -68,18 +85,19 @@ def main(argv=None) -> int:
                         "error": {
                             "code": e.code,
                             "message": str(e),
-                        }
+                        },
                     }
                     if getattr(e, "details", None):
                         payload["error"]["details"] = e.details
-                    print(json.dumps(payload, ensure_ascii=False, separators=(',', ':')))
+                    print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
                 else:
                     print(f"ftcheck: error: {str(e)}", file=sys.stderr)
-                continue      
+                continue
     except BrokenPipeError:
         return 0
-    
-    return 2 if problem_occurred else 0
+
+    return 2 if (problem_occurred or detect_error_occurred) else 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
