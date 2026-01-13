@@ -1,9 +1,8 @@
 # Import necessary modules
 import argparse
-import json
 import sys
 
-from filetype_checker import detector, scanner
+from filetype_checker import detector, reporting, scanner
 from filetype_checker.error import FtcheckError
 from filetype_checker.extensions import get_ext_and_mismatch
 
@@ -40,9 +39,16 @@ def main(argv=None) -> int:
                     "details": problem.get("details", None),
                 },
             }
-            print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+            print(reporting.format_json(payload))
         else:
-            print(f"ftcheck: error: {problem['message']}", file=sys.stderr)
+            print(
+                reporting.format_human_error(
+                    problem["details"]["path"],
+                    problem["code"],
+                    problem["message"],
+                ),
+                file=sys.stderr,
+            )
 
     # Perform detection
     try:
@@ -50,32 +56,17 @@ def main(argv=None) -> int:
             try:
                 file_report = detector.detect(file)
                 ext, mismatch = get_ext_and_mismatch(
-                    file_report["path"], file_report["file_type"], file_report["magic"]["matched"]
+                    file_report["path"], 
+                    file_report["file_type"], 
+                    file_report["magic"]["matched"]
                 )
                 file_report["ext"] = ext
                 file_report["mismatch"] = mismatch
 
                 if args.json:
-                    print(json.dumps(file_report, ensure_ascii=False, separators=(",", ":")))
+                    print(reporting.format_json(file_report))
                 else:
-                    path = file_report["path"]
-                    file_type = file_report["file_type"]
-                    size = file_report["size_bytes"]
-                    magic = file_report["magic"]
-                    matched = "yes" if magic["matched"] else "no"
-                    offset = magic["offset"] if magic["offset"] is not None else "N/A"
-                    signature = magic["signature"] if magic["signature"] is not None else "N/A"
-
-                    base = (
-                        f"{path}: {file_type}, matched={matched}, size={size}, "
-                        f"offset={offset}, signature={signature}"
-                    )
-
-                    if mismatch:
-                        base += f" (extension mismatch: {ext})"
-
-                    print(base)
-
+                    print(reporting.format_human_success(file_report))
             except FtcheckError as e:
                 detect_error_occurred = True
                 if args.json:
@@ -89,9 +80,9 @@ def main(argv=None) -> int:
                     }
                     if getattr(e, "details", None):
                         payload["error"]["details"] = e.details
-                    print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+                    print(reporting.format_json(payload))
                 else:
-                    print(f"ftcheck: error: {str(e)}", file=sys.stderr)
+                    print(reporting.format_human_error(file, e.code, str(e)), file=sys.stderr)
                 continue
     except BrokenPipeError:
         return 0
