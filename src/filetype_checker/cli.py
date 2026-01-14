@@ -24,23 +24,24 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     files, problems = scanner.expand_paths(args.paths, args.recursive)
-    problem_occurred = bool(problems)
-    detect_error_occurred = False
+    items = []
 
     # Print Errors encountered during path expansion
     for problem in problems:
-        if args.json:
-            payload = {
-                "ok": False,
-                "path": problem["details"]["path"],
-                "error": {
-                    "code": problem["code"],
-                    "message": problem["message"],
-                    "details": problem.get("details", None),
-                },
-            }
-            print(reporting.format_json(payload))
-        else:
+        payload = {
+            "ok": False,
+            "path": problem["details"]["path"],
+            "error": {
+                "code": problem["code"],
+                "message": problem["message"],
+            },
+        }
+        if problem.get("details") is not None:
+            payload["error"]["details"] = problem["details"]
+
+        items.append(payload)
+
+        if not args.json:
             print(
                 reporting.format_human_error(
                     problem["details"]["path"],
@@ -56,38 +57,75 @@ def main(argv=None) -> int:
             try:
                 file_report = detector.detect(file)
                 ext, mismatch = get_ext_and_mismatch(
-                    file_report["path"], 
-                    file_report["file_type"], 
-                    file_report["magic"]["matched"]
+                    file_report["path"], file_report["file_type"], file_report["magic"]["matched"]
                 )
                 file_report["ext"] = ext
                 file_report["mismatch"] = mismatch
+                items.append(file_report)
 
-                if args.json:
-                    print(reporting.format_json(file_report))
-                else:
+                if not args.json:
                     print(reporting.format_human_success(file_report))
             except FtcheckError as e:
-                detect_error_occurred = True
-                if args.json:
-                    payload = {
-                        "ok": False,
-                        "path": file,
-                        "error": {
-                            "code": e.code,
-                            "message": str(e),
-                        },
-                    }
-                    if getattr(e, "details", None):
-                        payload["error"]["details"] = e.details
-                    print(reporting.format_json(payload))
-                else:
+                payload = {
+                    "ok": False,
+                    "path": file,
+                    "error": {
+                        "code": e.code,
+                        "message": str(e),
+                    },
+                }
+                if getattr(e, "details", None):
+                    payload["error"]["details"] = e.details
+
+                items.append(payload)
+
+                if not args.json:
                     print(reporting.format_human_error(file, e.code, str(e)), file=sys.stderr)
                 continue
     except BrokenPipeError:
         return 0
 
-    return 2 if (problem_occurred or detect_error_occurred) else 0
+    files_scanned = sum(1 for file in items if file.get("ok") is True)
+    matched = sum(
+        1
+        for file in items
+        if file.get("ok") is True and file.get("magic", {}).get("matched") is True
+    )
+    errors = sum(1 for er in items if not er.get("ok", False))
+    unknown = sum(
+        1 for er in items if er.get("ok") is True and er.get("magic", {}).get("matched") is False
+    )
+
+    if args.json:
+        summary = {
+            "inputs": len(args.paths),
+            "files_scanned": files_scanned,
+            "matched": matched,
+            "unknown": unknown,
+            "errors": errors,
+        }
+        final_doc = {
+            "ok": errors == 0,
+            "summary": summary,
+            "results": items,
+        }
+
+        print(reporting.format_json(final_doc))
+    else:
+        print(
+            f"Scanned: {files_scanned} files "
+            f"(matched: {matched}, unknown: {unknown}, errors: {errors})",
+            file=sys.stderr,
+        )
+
+    if errors > 0:
+        exit_code = 2
+    elif unknown > 0:
+        exit_code = 1
+    else:
+        exit_code = 0
+
+    return exit_code
 
 
 if __name__ == "__main__":

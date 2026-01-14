@@ -21,7 +21,8 @@ def test_json_success_png(tmp_path: Path, capsys) -> None:
     assert captured.err == ""
 
     # Validate the JSON output
-    output = json.loads(captured.out)
+    doc = json.loads(captured.out)
+    output = doc["results"][0]
     assert output["ok"] is True
     assert output["path"] == str(p)
     assert output["file_type"] == "PNG Image"
@@ -32,6 +33,14 @@ def test_json_success_png(tmp_path: Path, capsys) -> None:
     assert output["magic"]["signature"] == "89504E470D0A1A0A"
     assert output["ext"] == ".png"
     assert output["mismatch"] is False
+
+    assert doc["ok"] is True
+    assert doc["summary"]["inputs"] == 1
+    assert doc["summary"]["files_scanned"] == 1
+    assert doc["summary"]["matched"] == 1
+    assert doc["summary"]["unknown"] == 0
+    assert doc["summary"]["errors"] == 0
+    assert len(doc["results"]) == 1
 
 def test_json_success_unknown(tmp_path: Path, capsys) -> None:
     # Create a temporary file with unknown magic number
@@ -45,11 +54,12 @@ def test_json_success_unknown(tmp_path: Path, capsys) -> None:
     # Capture the output
     captured = capsys.readouterr()
 
-    assert exit_code == 0
+    assert exit_code == 1
     assert captured.err == ""
 
     # Validate the JSON output
-    output = json.loads(captured.out)
+    doc = json.loads(captured.out)
+    output = doc["results"][0]
     assert output["ok"] is True
     assert output["path"] == str(p)
     assert output["file_type"] == "Unknown File Type"
@@ -61,6 +71,14 @@ def test_json_success_unknown(tmp_path: Path, capsys) -> None:
     assert output["ext"] == ".bin"
     assert output["mismatch"] is False 
 
+    assert doc["ok"] is True
+    assert doc["summary"]["inputs"] == 1
+    assert doc["summary"]["files_scanned"] == 1
+    assert doc["summary"]["matched"] == 0
+    assert doc["summary"]["unknown"] == 1
+    assert doc["summary"]["errors"] == 0
+    assert len(doc["results"]) == 1
+
 def test_json_error_no_path(tmp_path: Path, capsys) -> None:
     missing = tmp_path / "non_existent_file.bin"
 
@@ -70,12 +88,17 @@ def test_json_error_no_path(tmp_path: Path, capsys) -> None:
     assert exit_code == 2
     assert captured.err == ""
 
-    output = json.loads(captured.out)
+    doc = json.loads(captured.out)
+    output = doc["results"][0]
 
     assert output["ok"] is False
     assert output["path"] == str(missing)
     assert output["error"]["code"] == "ENOENT"
     assert "message" in output["error"]
+
+    assert doc["ok"] is False
+    assert doc["summary"]["files_scanned"] == 0
+    assert doc["summary"]["errors"] == 1
 
 def test_json_mismatch_true_when_extension_does_not_match(tmp_path: Path, capsys) -> None:
     jpeg_magic_number = b"\xff\xd8\xff"
@@ -89,12 +112,18 @@ def test_json_mismatch_true_when_extension_does_not_match(tmp_path: Path, capsys
     assert exit_code == 0
     assert captured.err == ""
 
-    output = json.loads(captured.out)
+    doc = json.loads(captured.out)
+    output = doc["results"][0]
     assert output["ok"] is True
     assert output["file_type"] == "JPEG Image"
     assert output["magic"]["matched"] is True
     assert output["ext"] == ".png"
     assert output["mismatch"] is True
+
+    assert doc["ok"] is True
+    assert doc["summary"]["matched"] == 1
+    assert doc["summary"]["unknown"] == 0
+    assert doc["summary"]["errors"] == 0
 
 def test_json_mismatch_false_when_extension_matches(tmp_path: Path, capsys) -> None:
     jpeg_magic_number = b"\xff\xd8\xff"
@@ -108,12 +137,18 @@ def test_json_mismatch_false_when_extension_matches(tmp_path: Path, capsys) -> N
     assert exit_code == 0
     assert captured.err == ""
 
-    output = json.loads(captured.out)
+    doc = json.loads(captured.out)
+    output = doc["results"][0]
     assert output["ok"] is True
     assert output["file_type"] == "JPEG Image"
     assert output["magic"]["matched"] is True
     assert output["ext"] == ".jpg"
     assert output["mismatch"] is False
+
+    assert doc["ok"] is True
+    assert doc["summary"]["matched"] == 1
+    assert doc["summary"]["unknown"] == 0
+    assert doc["summary"]["errors"] == 0
 
 def test_json_no_extension_never_mismatch(tmp_path: Path, capsys) -> None:
     jpeg_magic_number = b"\xff\xd8\xff"
@@ -127,12 +162,18 @@ def test_json_no_extension_never_mismatch(tmp_path: Path, capsys) -> None:
     assert exit_code == 0
     assert captured.err == ""
 
-    output = json.loads(captured.out)
+    doc = json.loads(captured.out)
+    output = doc["results"][0]
     assert output["ok"] is True
     assert output["file_type"] == "JPEG Image"
     assert output["magic"]["matched"] is True
     assert output["ext"] == ""
     assert output["mismatch"] is False
+
+    assert doc["ok"] is True
+    assert doc["summary"]["matched"] == 1
+    assert doc["summary"]["unknown"] == 0
+    assert doc["summary"]["errors"] == 0
 
 def test_json_unknown_type_never_mismatch(tmp_path: Path, capsys) -> None:
     payload = b"\x00\x11\x22\x33\x44\x55"
@@ -142,12 +183,19 @@ def test_json_unknown_type_never_mismatch(tmp_path: Path, capsys) -> None:
     exit_code = cli.main([str(path), "--json"])
     captured = capsys.readouterr()
 
-    assert exit_code == 0
+    assert exit_code == 1
     assert captured.err == ""
 
-    output = json.loads(captured.out)
+    doc = json.loads(captured.out)
+    output = doc["results"][0]
     assert output["ok"] is True
     assert output["file_type"] == "Unknown File Type"
     assert output["magic"]["matched"] is False
     assert output["ext"] == ".png"
     assert output["mismatch"] is False
+
+    assert doc["ok"] is True
+    assert doc["summary"]["files_scanned"] == 1
+    assert doc["summary"]["matched"] == 0
+    assert doc["summary"]["unknown"] == 1
+    assert doc["summary"]["errors"] == 0
