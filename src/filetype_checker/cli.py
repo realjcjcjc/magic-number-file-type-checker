@@ -28,25 +28,27 @@ def main(argv=None) -> int:
 
     # Print Errors encountered during path expansion
     for problem in problems:
+        path = (problem.details or {}).get("path") or "<unknown>"
+
         payload = {
             "ok": False,
-            "path": problem["details"]["path"],
+            "path": path,
             "error": {
-                "code": problem["code"],
-                "message": problem["message"],
+                "code": problem.code,
+                "message": str(problem),
             },
         }
-        if problem.get("details") is not None:
-            payload["error"]["details"] = problem["details"]
+        if problem.details is not None:
+            payload["error"]["details"] = problem.details
 
         items.append(payload)
 
         if not args.json:
             print(
                 reporting.format_human_error(
-                    problem["details"]["path"],
-                    problem["code"],
-                    problem["message"],
+                    path,
+                    payload["error"]["code"],
+                    payload["error"]["message"],
                 ),
                 file=sys.stderr,
             )
@@ -66,22 +68,39 @@ def main(argv=None) -> int:
                 if not args.json:
                     print(reporting.format_human_success(file_report))
             except FtcheckError as e:
+                err_path = (e.details or {}).get("path") or file
                 payload = {
                     "ok": False,
-                    "path": file,
+                    "path": err_path,
                     "error": {
                         "code": e.code,
                         "message": str(e),
                     },
                 }
-                if getattr(e, "details", None):
+                if e.details is not None:
                     payload["error"]["details"] = e.details
 
                 items.append(payload)
 
                 if not args.json:
-                    print(reporting.format_human_error(file, e.code, str(e)), file=sys.stderr)
+                    print(reporting.format_human_error(err_path, e.code, str(e)), file=sys.stderr)
                 continue
+            except OSError as e:
+                payload = {
+                    "ok": False,
+                    "path": file,
+                    "error": {
+                        "code": "EIO",
+                        "message": f"Error reading file: {file}",
+                        "details": {"path": file, "os_error": str(e)},
+                    },
+                }
+                items.append(payload)
+                if not args.json:
+                    print(
+                        reporting.format_human_error(file, "EIO", payload["error"]["message"]),
+                        file=sys.stderr,
+                    )
     except BrokenPipeError:
         return 0
 

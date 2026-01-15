@@ -1,5 +1,6 @@
 
 from filetype_checker import scanner
+from filetype_checker.error import FtcheckError
 
 
 def write_bytes(path, data: bytes) -> None:
@@ -67,5 +68,7 @@ def test_expand_path_missing_returns_problem(tmp_path):
 
     assert files == []
     assert len(problems) == 1
-    assert problems[0]["code"] == "ENOENT"
-    assert problems[0]["details"]["path"] == str(missing_path)
+    err = problems[0]
+    assert isinstance(err, FtcheckError)
+    assert err.code == "ENOENT"
+    assert (err.details or {}).get("path") == str(missing_path)

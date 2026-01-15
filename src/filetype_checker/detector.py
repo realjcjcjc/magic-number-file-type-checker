@@ -66,7 +66,7 @@ def detect(path: str) -> dict:
     except PermissionError as e:
         raise PermissionDeniedError(path) from e
     except OSError as e:
-        raise FileReadError(path, message=str(e)) from e
+        raise FileReadError(path, os_error=str(e)) from e
 
     magic_report = match_magic(magic_number)
     

@@ -1,7 +1,17 @@
 import json
+import stat
+import sys
+import pytest
 from pathlib import Path
 
 from filetype_checker import cli
+
+
+def get_result(doc: dict, path: Path) -> dict:
+    for r in doc["results"]:
+        if r.get("path") == str(path):
+            return r
+    raise AssertionError(f"Missing result for {path}")
 
 
 def test_json_success_png(tmp_path: Path, capsys) -> None:
@@ -22,7 +32,7 @@ def test_json_success_png(tmp_path: Path, capsys) -> None:
 
     # Validate the JSON output
     doc = json.loads(captured.out)
-    output = doc["results"][0]
+    output = get_result(doc, p)
     assert output["ok"] is True
     assert output["path"] == str(p)
     assert output["file_type"] == "PNG Image"
@@ -59,7 +69,7 @@ def test_json_success_unknown(tmp_path: Path, capsys) -> None:
 
     # Validate the JSON output
     doc = json.loads(captured.out)
-    output = doc["results"][0]
+    output = get_result(doc, p)
     assert output["ok"] is True
     assert output["path"] == str(p)
     assert output["file_type"] == "Unknown File Type"
@@ -89,7 +99,7 @@ def test_json_error_no_path(tmp_path: Path, capsys) -> None:
     assert captured.err == ""
 
     doc = json.loads(captured.out)
-    output = doc["results"][0]
+    output = get_result(doc, missing)
 
     assert output["ok"] is False
     assert output["path"] == str(missing)
@@ -113,7 +123,7 @@ def test_json_mismatch_true_when_extension_does_not_match(tmp_path: Path, capsys
     assert captured.err == ""
 
     doc = json.loads(captured.out)
-    output = doc["results"][0]
+    output = get_result(doc, path)
     assert output["ok"] is True
     assert output["file_type"] == "JPEG Image"
     assert output["magic"]["matched"] is True
@@ -138,7 +148,7 @@ def test_json_mismatch_false_when_extension_matches(tmp_path: Path, capsys) -> N
     assert captured.err == ""
 
     doc = json.loads(captured.out)
-    output = doc["results"][0]
+    output = get_result(doc, path)
     assert output["ok"] is True
     assert output["file_type"] == "JPEG Image"
     assert output["magic"]["matched"] is True
@@ -163,7 +173,7 @@ def test_json_no_extension_never_mismatch(tmp_path: Path, capsys) -> None:
     assert captured.err == ""
 
     doc = json.loads(captured.out)
-    output = doc["results"][0]
+    output = get_result(doc, path)
     assert output["ok"] is True
     assert output["file_type"] == "JPEG Image"
     assert output["magic"]["matched"] is True
@@ -187,7 +197,7 @@ def test_json_unknown_type_never_mismatch(tmp_path: Path, capsys) -> None:
     assert captured.err == ""
 
     doc = json.loads(captured.out)
-    output = doc["results"][0]
+    output = get_result(doc, path)
     assert output["ok"] is True
     assert output["file_type"] == "Unknown File Type"
     assert output["magic"]["matched"] is False
@@ -199,3 +209,54 @@ def test_json_unknown_type_never_mismatch(tmp_path: Path, capsys) -> None:
     assert doc["summary"]["matched"] == 0
     assert doc["summary"]["unknown"] == 1
     assert doc["summary"]["errors"] == 0
+
+def test_json_directory_non_recursive_scans_files(tmp_path: Path, capsys) -> None:
+    d = tmp_path / "d"
+    d.mkdir()
+    (d / "a.png").write_bytes(b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a" + b"\x00" * 5)
+    (d / "b.bin").write_bytes(b"\x00\x01\x02")
+
+    exit_code = cli.main([str(d), "--json"])
+    captured = capsys.readouterr()
+
+    doc = json.loads(captured.out)
+    assert captured.err == ""
+    assert doc["summary"]["inputs"] == 1
+    assert doc["summary"]["files_scanned"] == 2
+    assert doc["summary"]["matched"] == 1
+    assert doc["summary"]["unknown"] == 1
+    assert doc["summary"]["errors"] == 0
+    assert exit_code == 1  # because unknown exists
+
+def test_json_directory_recursive_finds_nested_files(tmp_path: Path, capsys) -> None:
+    d = tmp_path / "d"
+    (d / "sub").mkdir(parents=True)
+    (d / "sub" / "a.png").write_bytes(b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a" + b"\x00")
+
+    exit_code = cli.main([str(d), "--json", "-r"])
+    captured = capsys.readouterr()
+    doc = json.loads(captured.out)
+
+    assert captured.err == ""
+    assert doc["summary"]["files_scanned"] == 1
+    assert doc["summary"]["matched"] == 1
+    assert doc["summary"]["errors"] == 0
+    assert exit_code == 0
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="chmod permission tests unreliable on Windows")
+def test_json_permission_denied_file(tmp_path: Path, capsys) -> None:
+    p = tmp_path / "secret.bin"
+    p.write_bytes(b"\x00\x01\x02")
+    p.chmod(0)  # remove permissions
+
+    try:
+        exit_code = cli.main([str(p), "--json"])
+        captured = capsys.readouterr()
+        doc = json.loads(captured.out)
+
+        assert exit_code == 2  # because errors > 0
+        out = get_result(doc, p)
+        assert out["ok"] is False
+        assert out["error"]["code"] == "EACCES"
+    finally:
+        p.chmod(stat.S_IRUSR | stat.S_IWUSR)
