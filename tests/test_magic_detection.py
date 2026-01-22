@@ -23,7 +23,6 @@ def write_bytes(path, data: bytes) -> None:
         (b"\x50\x4b\x07\x08", "ZIP Archive", "504B0708"),
     ],
 )
-
 def test_detect_known_file_types(tmp_path, magic_number, expected_label, expected_magic_num):
     file_path = tmp_path / f"testfile_{expected_label.replace(' ', '_')}"
     write_bytes(file_path, magic_number + b"\x00" * 10)  # Add some padding bytes
@@ -37,6 +36,7 @@ def test_detect_known_file_types(tmp_path, magic_number, expected_label, expecte
     assert result["magic"]["offset"] == 0
     assert result["magic"]["signature"] == expected_magic_num
 
+
 def test_detect_unknown_file_type(tmp_path):
     file_path = tmp_path / "unknown_file"
     write_bytes(file_path, b"\x00\x11\x22\x33\x44\x55")
@@ -49,6 +49,7 @@ def test_detect_unknown_file_type(tmp_path):
     assert result["magic"]["matched"] is False
     assert result["magic"]["offset"] is None
     assert result["magic"]["signature"] is None
+
 
 def test_path_with_spaces(tmp_path):
     file_path = tmp_path / "file with spaces.pdf"
@@ -66,6 +67,30 @@ def test_path_with_spaces(tmp_path):
 
 def test_missing_file(tmp_path):
     file_path = tmp_path / "non_existent_file"
-    
+
     with pytest.raises(PathNotFoundError):
         detector.detect(str(file_path))
+
+
+def test_match_magic_prefers_longer_signature_when_priority_ties(monkeypatch):
+    db = [
+        (0, b"AB", "SHORT", 10),
+        (0, b"ABC", "LONGER", 10),
+    ]
+    monkeypatch.setattr(detector, "MAGIC_DB", db, raising=True)
+
+    out = detector.match_magic(b"ABCXXXX")
+    assert out["matched"] is True
+    assert out["file_type"] == "LONGER"
+
+
+def test_match_magic_prefers_higher_priority_over_length(monkeypatch):
+    db = [
+        (0, b"ABCDE", "LONG", 10),
+        (0, b"AB", "HIGH", 99),
+    ]
+    monkeypatch.setattr(detector, "MAGIC_DB", db, raising=True)
+
+    out = detector.match_magic(b"ABCDE")
+    assert out["matched"] is True
+    assert out["file_type"] == "HIGH"

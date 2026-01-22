@@ -10,37 +10,51 @@ from filetype_checker.error import (
 
 # Define a simple magic number database
 MAGIC_DB = [
-    (0, b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a", "PNG Image"),
-    (0, b"\xff\xd8\xff", "JPEG Image"),
-    (0, b"GIF87a", "GIF Image"),
-    (0, b"GIF89a", "GIF Image"),
-    (0, b"%PDF-", "PDF Document"),
-    (0, b"\x50\x4b\x03\x04", "ZIP Archive"),
-    (0, b"\x50\x4b\x05\x06", "ZIP Archive"),
-    (0, b"\x50\x4b\x07\x08", "ZIP Archive"),
+    (0, b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a", "PNG Image", 100),
+    (0, b"\xff\xd8\xff", "JPEG Image", 80),
+    (0, b"GIF87a", "GIF Image", 70),
+    (0, b"GIF89a", "GIF Image", 70),
+    (0, b"%PDF-", "PDF Document", 90),
+    (0, b"\x50\x4b\x03\x04", "ZIP Archive", 60),
+    (0, b"\x50\x4b\x05\x06", "ZIP Archive", 60),
+    (0, b"\x50\x4b\x07\x08", "ZIP Archive", 60),
 ]
 
 # Define the maximum number of bytes to read for magic number detection
-MAX_MAGIC_BYTES = max(offset + len(magic) for offset, magic, _ in MAGIC_DB)
+MAX_MAGIC_BYTES = max(offset + len(magic) for offset, magic, _, _priority in MAGIC_DB)
+
 
 # Match the magic number against the database
 def match_magic(magic_number: bytes) -> dict:
-    for offset, magic, label in MAGIC_DB:
+    best = None
+
+    for index, (offset, magic, label, priority) in enumerate(MAGIC_DB):
         end = offset + len(magic)
         if len(magic_number) >= end and magic_number[offset:end] == magic:
-            return {
-                "file_type": label,
-                "matched": True,
-                "offset": offset,
-                "signature": magic.hex().upper(),
-            }
-        
+            candidate = (priority, len(magic), -index, offset, magic, label)
+            if best is None or candidate > best:
+                best = candidate
+
+    if best is None:
+        return {
+            "file_type": "Unknown File Type",
+            "matched": False,
+            "offset": None,
+            "signature": None,
+        }
+
+    _, _, _, offset, magic, label = best
     return {
-        "file_type": "Unknown File Type",
-        "matched": False,
-        "offset": None,
-        "signature": None,
+        "file_type": label,
+        "matched": True,
+        "offset": offset,
+        "signature": magic.hex().upper(),
+        "rule": {
+            "priority": best[0],
+            "length": best[1],
+        }
     }
+
 
 def detect(path: str) -> dict:
     file_report = {
@@ -56,8 +70,8 @@ def detect(path: str) -> dict:
     }
 
     try:
-        size_bytes = os.stat(path).st_size 
-        with open(path, "rb") as f: 
+        size_bytes = os.stat(path).st_size
+        with open(path, "rb") as f:
             magic_number = f.read(MAX_MAGIC_BYTES)
     except FileNotFoundError as e:
         raise PathNotFoundError(path) from e
@@ -69,7 +83,7 @@ def detect(path: str) -> dict:
         raise FileReadError(path, os_error=str(e)) from e
 
     magic_report = match_magic(magic_number)
-    
+
     file_report["ok"] = True
     file_report["file_type"] = magic_report["file_type"]
     file_report["size_bytes"] = size_bytes

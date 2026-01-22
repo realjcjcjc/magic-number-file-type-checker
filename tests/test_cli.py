@@ -1,8 +1,9 @@
 import json
 import stat
 import sys
-import pytest
 from pathlib import Path
+
+import pytest
 
 from filetype_checker import cli
 
@@ -52,6 +53,7 @@ def test_json_success_png(tmp_path: Path, capsys) -> None:
     assert doc["summary"]["errors"] == 0
     assert len(doc["results"]) == 1
 
+
 def test_json_success_unknown(tmp_path: Path, capsys) -> None:
     # Create a temporary file with unknown magic number
     unknown_magic = b"\x00\x11\x22\x33\x44\x55"
@@ -79,7 +81,7 @@ def test_json_success_unknown(tmp_path: Path, capsys) -> None:
     assert output["magic"]["offset"] is None
     assert output["magic"]["signature"] is None
     assert output["ext"] == ".bin"
-    assert output["mismatch"] is False 
+    assert output["mismatch"] is False
 
     assert doc["ok"] is True
     assert doc["summary"]["inputs"] == 1
@@ -88,6 +90,7 @@ def test_json_success_unknown(tmp_path: Path, capsys) -> None:
     assert doc["summary"]["unknown"] == 1
     assert doc["summary"]["errors"] == 0
     assert len(doc["results"]) == 1
+
 
 def test_json_error_no_path(tmp_path: Path, capsys) -> None:
     missing = tmp_path / "non_existent_file.bin"
@@ -109,6 +112,7 @@ def test_json_error_no_path(tmp_path: Path, capsys) -> None:
     assert doc["ok"] is False
     assert doc["summary"]["files_scanned"] == 0
     assert doc["summary"]["errors"] == 1
+
 
 def test_json_mismatch_true_when_extension_does_not_match(tmp_path: Path, capsys) -> None:
     jpeg_magic_number = b"\xff\xd8\xff"
@@ -135,6 +139,7 @@ def test_json_mismatch_true_when_extension_does_not_match(tmp_path: Path, capsys
     assert doc["summary"]["unknown"] == 0
     assert doc["summary"]["errors"] == 0
 
+
 def test_json_mismatch_false_when_extension_matches(tmp_path: Path, capsys) -> None:
     jpeg_magic_number = b"\xff\xd8\xff"
     payload = jpeg_magic_number + b"\x00" * 10
@@ -159,6 +164,7 @@ def test_json_mismatch_false_when_extension_matches(tmp_path: Path, capsys) -> N
     assert doc["summary"]["matched"] == 1
     assert doc["summary"]["unknown"] == 0
     assert doc["summary"]["errors"] == 0
+
 
 def test_json_no_extension_never_mismatch(tmp_path: Path, capsys) -> None:
     jpeg_magic_number = b"\xff\xd8\xff"
@@ -185,6 +191,7 @@ def test_json_no_extension_never_mismatch(tmp_path: Path, capsys) -> None:
     assert doc["summary"]["unknown"] == 0
     assert doc["summary"]["errors"] == 0
 
+
 def test_json_unknown_type_never_mismatch(tmp_path: Path, capsys) -> None:
     payload = b"\x00\x11\x22\x33\x44\x55"
     path = tmp_path / "unknown.png"
@@ -210,6 +217,7 @@ def test_json_unknown_type_never_mismatch(tmp_path: Path, capsys) -> None:
     assert doc["summary"]["unknown"] == 1
     assert doc["summary"]["errors"] == 0
 
+
 def test_json_directory_non_recursive_scans_files(tmp_path: Path, capsys) -> None:
     d = tmp_path / "d"
     d.mkdir()
@@ -228,6 +236,7 @@ def test_json_directory_non_recursive_scans_files(tmp_path: Path, capsys) -> Non
     assert doc["summary"]["errors"] == 0
     assert exit_code == 1  # because unknown exists
 
+
 def test_json_directory_recursive_finds_nested_files(tmp_path: Path, capsys) -> None:
     d = tmp_path / "d"
     (d / "sub").mkdir(parents=True)
@@ -243,7 +252,10 @@ def test_json_directory_recursive_finds_nested_files(tmp_path: Path, capsys) -> 
     assert doc["summary"]["errors"] == 0
     assert exit_code == 0
 
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="chmod permission tests unreliable on Windows")
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="chmod permission tests unreliable on Windows"
+)
 def test_json_permission_denied_file(tmp_path: Path, capsys) -> None:
     p = tmp_path / "secret.bin"
     p.write_bytes(b"\x00\x01\x02")
