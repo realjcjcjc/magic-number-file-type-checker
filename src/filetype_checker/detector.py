@@ -52,7 +52,7 @@ def match_magic(magic_number: bytes) -> dict:
         "rule": {
             "priority": best[0],
             "length": best[1],
-        }
+        },
     }
 
 
@@ -70,8 +70,8 @@ def detect(path: str) -> dict:
     }
 
     try:
-        size_bytes = os.stat(path).st_size
         with open(path, "rb") as f:
+            size_bytes = os.fstat(f.fileno()).st_size
             magic_number = f.read(MAX_MAGIC_BYTES)
     except FileNotFoundError as e:
         raise PathNotFoundError(path) from e

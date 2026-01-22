@@ -8,6 +8,7 @@ Command: `ftcheck`
 ### Setup (dev)
 ```bash
 python -m pip install -e ".[dev]"
+source .venv/Scripts/activate
 ```
 
 ## Usage

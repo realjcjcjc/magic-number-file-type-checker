@@ -20,9 +20,10 @@ def get_ext_and_mismatch(path: str, file_type: str | None, matched: bool) -> tup
         return ext, False
 
     if not matched:
-        return ext, False  # Unknown file types cannot mismatch
+        return ext, False  # Only report mismatch when magic matched
 
-    expected_exts = EXTENSION_DB.get(file_type) if file_type else None
+    key = file_type.strip() if file_type else None
+    expected_exts = EXTENSION_DB.get(key) if key else None
     if expected_exts is None:
         return ext, False  # No expected extensions for unknown file types
 

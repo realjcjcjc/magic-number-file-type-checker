@@ -16,10 +16,10 @@ def main(argv=None) -> int:
     )
 
     # Add arguments
-    parser.add_argument("paths", nargs="+", help="paths to the file to check.")
-    parser.add_argument("--json", action="store_true", help="output result in JSON format.")
+    parser.add_argument("paths", nargs="+", help="Files and/or directories to scan")
+    parser.add_argument("--json", action="store_true", help="Emit a single JSON document to stdout")
     parser.add_argument(
-        "-r", "--recursive", action="store_true", help="recursively check files in directories."
+        "-r", "--recursive", action="store_true", help="Recurse into directories."
     )
     args = parser.parse_args(argv)
 
