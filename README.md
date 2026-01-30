@@ -1,5 +1,5 @@
 # File Type Checker (Magic Numbers)
-A Python CLI tool that detects file types by reading "magic numbers" or file signatures
+A Python CLI tool that detects file types by reading "magic numbers" or file signatures.
 
 Command: `ftcheck`
 
